@@ -40,7 +40,7 @@
 
   .dashboard-card i {
     font-size: 30px;
-    color: #0a84ff;
+    color:rgb(241, 248, 255);
   }
 
   .card-title {
@@ -67,7 +67,7 @@
 
   <a href="main.php?page=sql" class="dashboard-card">
     <i class="fa-solid fa-database"></i>
-    <div class="card-title">SQL Assistant</div>
+    <div class="card-title">Database Assistant</div>
     <div class="card-desc">Ask questions in plain English and retrieve data directly from your database.</div>
   </a>
 </div>

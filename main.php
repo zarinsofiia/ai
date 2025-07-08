@@ -72,13 +72,20 @@
         .sidebar a {
             color: #f1f1f1;
             text-decoration: none;
-            padding: 10px 20px;
+            padding: 12px 18px;
+            /* tightened padding */
             font-weight: 500;
             border-radius: 6px;
             transition: background-color 0.2s;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            /* wider gap between icon and text */
+            line-height: 1.3;
+            /* better line balance */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .sidebar a:hover {
@@ -150,7 +157,7 @@
                         <i class="fa-solid fa-comments"></i><span>Chat</span>
                     </a>
                     <a href="main.php?page=sql" class="<?= $active === 'sql' ? 'active' : '' ?>">
-                        <i class="fa-solid fa-database"></i><span>SQL</span>
+                        <i class="fa-solid fa-database"></i><span>Database Assistant</span>
                     </a>
                     <a href="login/index.php" onclick="localStorage.clear()"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></a>
                 </nav>
