@@ -11,7 +11,7 @@
   .chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 80px 20px 140px;
+    /* padding: 80px 20px 140px; */
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -107,6 +107,25 @@
     border: 1px solid #ff5f5f;
     border-radius: 10px;
   }
+  .icon-button {
+  width: 48px;
+  height: 48px;
+  background-color: #2a2a2a;
+  border: none;
+  border-radius: 10px;
+  color: #f1f1f1;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.icon-button:hover {
+  background-color: #3a3a3a;
+}
+
 </style>
 
 
@@ -118,7 +137,12 @@
   <!-- ✅ input stays here, scroll only above -->
   <div class="chat-input-container">
     <input id="prompt" class="chat-input" placeholder="Type your message..." />
-    <button class="send-button" onclick="askStreamingAI()">Send</button>
+<button class="icon-button" onclick="askStreamingAI()" title="Send">
+  <i class="fa-solid fa-paper-plane"></i>
+</button>
+<button id="mic-btn" class="icon-button" title="Speak">
+  <i class="fa-solid fa-microphone"></i>
+</button>
   </div>
 </div>
 
