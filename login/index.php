@@ -132,47 +132,59 @@
 </div>
 
 <script>
-    document.getElementById('loginForm').addEventListener('submit', async function (e) {
-  e.preventDefault();
+    // 🚀 Redirect if already logged in
+    // if (localStorage.getItem('bearerToken')) {
+    //     window.location.href = '../ai/main.php?page=dashboard';
+    // }
 
-  const username = document.getElementById('username').value.trim();
-  const password = document.getElementById('password').value.trim();
-  const msg = document.getElementById('loginMessage');
-  const button = this.querySelector('button');
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
 
-  msg.innerText = '';
-  button.classList.add('loading');
-  button.disabled = true;
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value.trim();
+        const msg = document.getElementById('loginMessage');
+        const button = this.querySelector('button');
 
-  if (!username || !password) {
-    msg.innerText = '❌ Please fill in both fields.';
-    button.classList.remove('loading');
-    button.disabled = false;
-    return;
-  }
+        msg.innerText = '';
+        button.classList.add('loading');
+        button.disabled = true;
 
-  try {
-    const response = await fetch('http://192.168.2.70:3001/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+        if (!username || !password) {
+            msg.innerText = '❌ Please fill in both fields.';
+            button.classList.remove('loading');
+            button.disabled = false;
+            return;
+        }
+
+        try {
+            const response = await fetch('http://192.168.2.70:3001/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username,
+                    password
+                })
+            });
+
+            const data = await response.json();
+
+          if (response.ok && data.accessToken && data.refreshToken) {
+
+                localStorage.setItem('bearerToken', data.accessToken);
+                 localStorage.setItem('refreshToken', data.refreshToken); 
+                window.location.href = '../ai/main.php?page=dashboard';
+            } else {
+                msg.innerText = '❌ Login failed: Invalid credentials';
+            }
+
+        } catch (err) {
+            msg.innerText = '❌ Server error. Please try again.';
+            console.error('Login error:', err);
+        } finally {
+            button.classList.remove('loading');
+            button.disabled = false;
+        }
     });
-
-    const data = await response.json();
-
-    if (response.ok && data.accessToken) {
-      localStorage.setItem('bearerToken', data.accessToken);
-      window.location.href = '../dashboard/index.php';
-    } else {
-      msg.innerText = '❌ Login failed: Invalid credentials';
-    }
-
-  } catch (err) {
-    msg.innerText = '❌ Server error. Please try again.';
-    console.error('Login error:', err);
-  } finally {
-    button.classList.remove('loading');
-    button.disabled = false;
-  }
-});
 </script>

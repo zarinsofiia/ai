@@ -1,27 +1,23 @@
 <style>
+  /* (keep your original style unchanged) */
   .chat-body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
-  overflow: hidden; /* ✅ added */
-}
-
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
 
   .chat-messages {
     flex: 1;
     overflow-y: auto;
-    /* padding: 80px 20px 140px; */
     display: flex;
     flex-direction: column;
     gap: 10px;
-
-    /* ✅ added nice scrollbar */
-    scrollbar-width: thin;                     /* Firefox */
-    scrollbar-color: #444 transparent;         /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: #444 transparent;
   }
 
-  /* ✅ Webkit scrollbar for Chrome/Edge */
   .chat-messages::-webkit-scrollbar {
     width: 6px;
   }
@@ -64,15 +60,14 @@
     border-bottom-right-radius: 12px;
   }
 
- .chat-input-container {
-  margin-top: auto; /* Push input to bottom inside flex layout */
-  display: flex;
-  gap: 10px;
-  padding: 20px;
-  background-color: #1e1e1e;
-  border-top: 1px solid #333;
-}
-
+  .chat-input-container {
+    margin-top: auto;
+    display: flex;
+    gap: 10px;
+    padding: 20px;
+    background-color: #1e1e1e;
+    border-top: 1px solid #333;
+  }
 
   .chat-input {
     flex: 1;
@@ -85,122 +80,233 @@
     outline: none;
   }
 
-  .send-button {
-    margin-left: 12px;
-    padding: 14px 24px;
+  .icon-button {
+    width: 48px;
+    height: 48px;
+    background-color: #2a2a2a;
     border: none;
     border-radius: 10px;
-    background-color: #0a84ff;
-    color: white;
-    font-size: 15px;
+    color: #f1f1f1;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
+    transition: background-color 0.2s ease;
   }
 
-  .send-button:hover {
-    background-color: #006fd6;
+  .icon-button:hover {
+    background-color: #3a3a3a;
   }
-
-  .error-message {
-    align-self: flex-start;
-    background-color: #3a1a1a;
-    color: #ff5f5f;
-    border: 1px solid #ff5f5f;
-    border-radius: 10px;
-  }
-  .icon-button {
-  width: 48px;
-  height: 48px;
-  background-color: #2a2a2a;
-  border: none;
-  border-radius: 10px;
-  color: #f1f1f1;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.icon-button:hover {
-  background-color: #3a3a3a;
-}
-
 </style>
-
 
 <div class="chat-body">
   <div class="chat-messages" id="chat-container">
     <div class="ai-message message">Hi! Ask me anything</div>
   </div>
 
-  <!-- ✅ input stays here, scroll only above -->
   <div class="chat-input-container">
     <input id="prompt" class="chat-input" placeholder="Type your message..." />
-<button class="icon-button" onclick="askStreamingAI()" title="Send">
-  <i class="fa-solid fa-paper-plane"></i>
-</button>
-<button id="mic-btn" class="icon-button" title="Speak">
-  <i class="fa-solid fa-microphone"></i>
-</button>
+    <button class="icon-button" onclick="askStreamingAI()" title="Send">
+      <i class="fa-solid fa-paper-plane"></i>
+    </button>
+    <button id="mic-btn" class="icon-button" title="Record audio">
+      <i class="fa-solid fa-microphone"></i>
+    </button>
+    <input type="file" id="chat-audio-upload" accept="audio/*" style="display: none;" />
+    <button class="icon-button" onclick="document.getElementById('chat-audio-upload').click()" title="Upload audio">
+      <i class="fa-solid fa-file-audio"></i>
+    </button>
   </div>
+  <span id="chat-record-status" style="padding-left: 10px; font-size: 13px; color: #aaa;"></span>
+
 </div>
 
-
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    window.askStreamingAI = async function () {
-      const input = document.getElementById('prompt');
-      const prompt = input.value.trim();
-      if (!prompt) return;
+  async function refreshAccessToken() {
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (!refreshToken) throw new Error('No refresh token');
 
-      appendMessage('user', prompt);
-      input.value = '';
+      const res = await fetch('http://192.168.2.70:3001/api/auth/refresh-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          refreshToken
+        })
+      });
 
-      const chatbox = document.getElementById('chat-container');
-      const aiMsg = document.createElement('div');
-      aiMsg.classList.add('ai-message', 'message');
-      chatbox.appendChild(aiMsg);
-      chatbox.scrollTop = chatbox.scrollHeight;
-
-      try {
-        const res = await fetch('http://192.168.2.70:3001/api/askAI', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + localStorage.getItem('accessToken')
-          },
-          body: JSON.stringify({
-            model: 'deepseek-r1:7b',
-            prompt: prompt
-          })
-        });
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          fullText += chunk;
-          aiMsg.textContent = fullText;
-          chatbox.scrollTop = chatbox.scrollHeight;
-        }
-      } catch (err) {
-        aiMsg.textContent = '❌ Error: ' + err.message;
+      const data = await res.json();
+      if (res.ok && data.accessToken) {
+        localStorage.setItem('bearerToken', data.accessToken);
+        return data.accessToken;
+      } else {
+        throw new Error('Refresh failed');
       }
-    };
+    } catch (err) {
+      alert('Session expired. Please log in again.');
+      window.location.href = '../ai/login.php';
+      return null;
+    }
+  }
 
-    function appendMessage(role, text) {
-      const chatbox = document.getElementById('chat-container');
-      const msg = document.createElement('div');
-      msg.classList.add(role === 'user' ? 'user-message' : 'ai-message', 'message');
-      msg.textContent = text;
-      chatbox.appendChild(msg);
+  async function askStreamingAI() {
+    const input = document.getElementById('prompt');
+    const prompt = input.value.trim();
+    if (!prompt) return;
+
+    appendMessage('user', prompt);
+    input.value = '';
+
+    const chatbox = document.getElementById('chat-container');
+    const aiMsg = document.createElement('div');
+    aiMsg.classList.add('ai-message', 'message');
+    chatbox.appendChild(aiMsg);
+    chatbox.scrollTop = chatbox.scrollHeight;
+
+    let accessToken = localStorage.getItem('bearerToken');
+    let res = await fetchWithAuth(accessToken, prompt);
+
+    if (res?.status === 401) {
+      accessToken = await refreshAccessToken();
+      if (!accessToken) return;
+      res = await fetchWithAuth(accessToken, prompt);
+    }
+
+    if (!res || !res.ok) {
+      aiMsg.textContent = '❌ Error: Failed to fetch response';
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while (true) {
+      const {
+        done,
+        value
+      } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      fullText += chunk;
+      aiMsg.textContent = fullText;
       chatbox.scrollTop = chatbox.scrollHeight;
     }
+  }
+
+  async function fetchWithAuth(token, prompt) {
+    try {
+      return await fetch('http://192.168.2.70:3001/api/askAI', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          model: 'deepseek-r1:7b',
+          prompt
+        })
+      });
+    } catch (err) {
+      console.error('Fetch error:', err);
+      return null;
+    }
+  }
+
+  function appendMessage(role, text) {
+    const chatbox = document.getElementById('chat-container');
+    const msg = document.createElement('div');
+    msg.classList.add(role === 'user' ? 'user-message' : 'ai-message', 'message');
+    msg.textContent = text;
+    chatbox.appendChild(msg);
+    chatbox.scrollTop = chatbox.scrollHeight;
+  }
+</script>
+
+<script>
+  // 🎤 Microphone Recording (transcribe only)
+  let mediaRecorder;
+  let audioChunks = [];
+  const micBtn = document.getElementById('mic-btn');
+  const micIcon = micBtn.querySelector('i');
+  const chatStatus = document.getElementById('chat-record-status');
+
+  micBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      micIcon.className = 'fa-solid fa-microphone';
+      chatStatus.textContent = 'Transcribing...';
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true
+        });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(audioChunks, {
+            type: 'audio/webm'
+          });
+          const formData = new FormData();
+          formData.append('audio', blob, 'voice.webm');
+
+          try {
+            const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
+              },
+              body: formData
+            });
+            const data = await res.json();
+            document.getElementById('prompt').value = data.transcript || '';
+            chatStatus.textContent = '✅ Transcribed';
+          } catch (err) {
+            chatStatus.textContent = '❌ Transcription failed';
+          }
+        };
+
+        mediaRecorder.start();
+        micIcon.className = 'fa-solid fa-stop';
+        chatStatus.textContent = '🎙️ Recording... Click to stop';
+      } catch (err) {
+        chatStatus.textContent = '❌ Microphone access denied';
+      }
+    }
   });
+</script>
+
+<script>
+  // 🎵 File Upload Transcription (no auto-send)
+  document.getElementById('chat-audio-upload').addEventListener('change', async function() {
+    const file = this.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('audio', file);
+    const chatStatus = document.getElementById('chat-record-status');
+    chatStatus.textContent = '⏳ Transcribing uploaded file...';
+
+    try {
+      const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      document.getElementById('prompt').value = data.transcript || '';
+      chatStatus.textContent = '✅ Transcribed from file';
+    } catch (err) {
+      chatStatus.textContent = '❌ File transcription failed';
+    }
+  });
+
 </script>

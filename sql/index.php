@@ -142,8 +142,32 @@
 
 
 </div>
-
 <script>
+    async function refreshAccessToken() {
+        try {
+            const res = await fetch('http://192.168.2.70:3001/api/auth/refresh-token', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await res.json();
+            if (res.ok && data.accessToken) {
+                localStorage.setItem('bearerToken', data.accessToken);
+                return data.accessToken;
+            } else {
+                throw new Error('Token refresh failed');
+            }
+        } catch (err) {
+            alert('Session expired. Please log in again.');
+            window.location.href = '../ai/main.php?page=login';
+            return null;
+        }
+    }
+
+
     async function askSQLAI() {
         const input = document.getElementById('sql-prompt');
         const prompt = input.value.trim();
@@ -153,32 +177,53 @@
         input.value = '';
 
         const container = document.getElementById('sql-container');
-        const responseMsg = document.createElement('div');
-        responseMsg.classList.add('sql-response', 'message');
-        container.appendChild(responseMsg);
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('sql-response', 'message');
+
+        const contentSpan = document.createElement('span');
+        wrapper.appendChild(contentSpan);
+
+        const speakerBtn = document.createElement('i');
+        speakerBtn.className = 'fa-solid fa-volume-high';
+        speakerBtn.style.marginLeft = '10px';
+        speakerBtn.style.cursor = 'pointer';
+        speakerBtn.title = 'Play voice';
+        speakerBtn.addEventListener('click', () => {
+            speakText(contentSpan.textContent);
+        });
+
+        wrapper.appendChild(speakerBtn);
+        container.appendChild(wrapper);
         container.scrollTop = container.scrollHeight;
 
-        try {
-            const res = await fetch('http://192.168.2.70:3001/api/askSQL', {
+        const makeRequest = async () => {
+            const token = localStorage.getItem('bearerToken');
+            return await fetch('http://192.168.2.70:3001/api/askAI/sql', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('accessToken')
+                    'Authorization': 'Bearer ' + token
                 },
                 body: JSON.stringify({
                     prompt
                 })
             });
+        };
+
+        try {
+            let res = await makeRequest();
+
+            if (res.status === 401) {
+                await refreshAccessToken();
+                res = await makeRequest(); // retry
+            }
 
             const data = await res.json();
-            if (data.summary) {
-                responseMsg.textContent = data.summary;
-            } else {
-                responseMsg.textContent = '✅ SQL executed. Check the console for raw result.';
-                console.log('Raw result:', data);
-            }
+            const summary = data.summary || '⚠️ No summary returned.';
+            contentSpan.textContent = summary;
+
         } catch (err) {
-            responseMsg.textContent = '❌ Error: ' + err.message;
+            contentSpan.textContent = '❌ Error: ' + err.message;
         }
 
         container.scrollTop = container.scrollHeight;
@@ -193,8 +238,9 @@
         container.scrollTop = container.scrollHeight;
     }
 </script>
+
 <script>
-    
+    // 🎤 Voice recording (unchanged)
     let mediaRecorder;
     let audioChunks = [];
     const recordBtn = document.getElementById('record-btn');
@@ -224,10 +270,10 @@
                     formData.append('audio', blob, 'voice.webm');
 
                     try {
-                        const res = await fetch('http://192.168.2.70:3001/api/transcribe', {
+                        const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
                             method: 'POST',
                             headers: {
-                                'Authorization': 'Bearer ' + localStorage.getItem('accessToken')
+                                'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
                             },
                             body: formData
                         });
@@ -249,31 +295,40 @@
         }
     });
 </script>
+
 <script>
-document.getElementById('audio-upload').addEventListener('change', async function () {
-  const file = this.files[0];
-  if (!file) return;
+    // 🎵 File upload (unchanged)
+    document.getElementById('audio-upload').addEventListener('change', async function() {
+        const file = this.files[0];
+        if (!file) return;
 
-  const formData = new FormData();
-  formData.append('audio', file);
+        const formData = new FormData();
+        formData.append('audio', file);
 
-  const status = document.getElementById('record-status');
-  status.textContent = '⏳ Transcribing uploaded file...';
+        const status = document.getElementById('record-status');
+        status.textContent = '⏳ Transcribing uploaded file...';
 
-  try {
-    const res = await fetch('http://192.168.2.70:3001/api/transcribe', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + localStorage.getItem('accessToken')
-      },
-      body: formData
+        try {
+            const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
+                },
+                body: formData
+            });
+
+            const data = await res.json();
+            document.getElementById('sql-prompt').value = data.transcript || '';
+            status.textContent = '✅ Transcribed from file';
+        } catch (err) {
+            status.textContent = '❌ File transcription failed';
+        }
     });
 
-    const data = await res.json();
-    document.getElementById('sql-prompt').value = data.transcript || '';
-    status.textContent = '✅ Transcribed from file';
-  } catch (err) {
-    status.textContent = '❌ File transcription failed';
-  }
-});
+    function speakText(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US'; // or 'ms-MY' for Malay
+        utterance.rate = 1; // 0.5 - 2
+        speechSynthesis.speak(utterance);
+    }
 </script>
