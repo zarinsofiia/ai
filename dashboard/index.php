@@ -73,3 +73,4 @@
 </div>
 
 </div>
+<script src="../ai/auth-check.js"></script>

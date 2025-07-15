@@ -121,37 +121,10 @@
   <span id="chat-record-status" style="padding-left: 10px; font-size: 13px; color: #aaa;"></span>
 
 </div>
+<script src="../ai/auth-check.js"></script>
+
 
 <script>
-  async function refreshAccessToken() {
-    try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) throw new Error('No refresh token');
-
-      const res = await fetch('http://192.168.2.70:3001/api/auth/refresh-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          refreshToken
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok && data.accessToken) {
-        localStorage.setItem('bearerToken', data.accessToken);
-        return data.accessToken;
-      } else {
-        throw new Error('Refresh failed');
-      }
-    } catch (err) {
-      alert('Session expired. Please log in again.');
-      window.location.href = '../ai/login.php';
-      return null;
-    }
-  }
-
   async function askStreamingAI() {
     const input = document.getElementById('prompt');
     const prompt = input.value.trim();
@@ -169,10 +142,9 @@
     let accessToken = localStorage.getItem('bearerToken');
     let res = await fetchWithAuth(accessToken, prompt);
 
-    if (res?.status === 401) {
-      accessToken = await refreshAccessToken();
-      if (!accessToken) return;
-      res = await fetchWithAuth(accessToken, prompt);
+    if (res?.status === 401 || res?.status === 403) {
+      // Token invalid or expired — logout
+      return logoutAndRedirect();
     }
 
     if (!res || !res.ok) {
@@ -196,6 +168,7 @@
       chatbox.scrollTop = chatbox.scrollHeight;
     }
   }
+
 
   async function fetchWithAuth(token, prompt) {
     try {
@@ -308,5 +281,4 @@
       chatStatus.textContent = '❌ File transcription failed';
     }
   });
-
 </script>

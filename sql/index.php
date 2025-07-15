@@ -125,7 +125,7 @@
 
 <div class="sql-body">
     <div class="sql-messages" id="sql-container">
-        <div class="sql-response message">💡 Type a natural language query like "Show me top 5 customers"</div>
+        <div class="sql-response message"> Type a natural language query like "Show me top 5 customers"</div>
     </div>
 
     <div class="sql-input-container">
@@ -142,30 +142,16 @@
 
 
 </div>
-<script>
-    async function refreshAccessToken() {
-        try {
-            const res = await fetch('http://192.168.2.70:3001/api/auth/refresh-token', {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
+<script src="../ai/auth-check.js"></script>
 
-            const data = await res.json();
-            if (res.ok && data.accessToken) {
-                localStorage.setItem('bearerToken', data.accessToken);
-                return data.accessToken;
-            } else {
-                throw new Error('Token refresh failed');
-            }
-        } catch (err) {
-            alert('Session expired. Please log in again.');
-            window.location.href = '../ai/main.php?page=login';
-            return null;
-        }
-    }
+<script>
+    //     function logoutAndRedirect() {
+    //     localStorage.removeItem('bearerToken');
+    //     localStorage.removeItem('refreshToken');
+    //     alert('Your session has expired. Please login again.');
+    //     window.location.href = '../ai'; // adjust if needed
+    //   }
+
 
 
     async function askSQLAI() {
@@ -184,13 +170,13 @@
         wrapper.appendChild(contentSpan);
 
         const speakerBtn = document.createElement('i');
-        speakerBtn.className = 'fa-solid fa-volume-high';
-        speakerBtn.style.marginLeft = '10px';
-        speakerBtn.style.cursor = 'pointer';
-        speakerBtn.title = 'Play voice';
-        speakerBtn.addEventListener('click', () => {
-            speakText(contentSpan.textContent);
-        });
+        // speakerBtn.className = 'fa-solid fa-volume-high';
+        // speakerBtn.style.marginLeft = '10px';
+        // speakerBtn.style.cursor = 'pointer';
+        // speakerBtn.title = 'Play voice';
+        // speakerBtn.addEventListener('click', () => {
+        //     speakText(contentSpan.textContent);
+        // });
 
         wrapper.appendChild(speakerBtn);
         container.appendChild(wrapper);
@@ -213,13 +199,29 @@
         try {
             let res = await makeRequest();
 
-            if (res.status === 401) {
-                await refreshAccessToken();
-                res = await makeRequest(); // retry
+            if (res.status === 401 || res.status === 403) {
+                return logoutAndRedirect();
             }
 
             const data = await res.json();
-            const summary = data.summary || '⚠️ No summary returned.';
+            console.log('✅ API Response:', data);
+
+            if (data.error) {
+                contentSpan.textContent = '❌ ' + (data.error || 'An error occurred.');
+                return;
+            }
+
+            let summary = data.summary?.trim();
+
+            if (!summary) {
+                // If summary is missing, fallback to row count or SQL
+                if (Array.isArray(data.result)) {
+                    summary = `✅ ${data.result.length} row(s) returned.`;
+                } else {
+                    summary = '⚠️ No summary available.';
+                }
+            }
+
             contentSpan.textContent = summary;
 
         } catch (err) {
@@ -278,6 +280,9 @@
                             body: formData
                         });
 
+                        if (res.status === 401 || res.status === 403) {
+                            return logoutAndRedirect();
+                        }
                         const data = await res.json();
                         document.getElementById('sql-prompt').value = data.transcript || '';
                         recordStatus.textContent = '✅ Transcribed';
@@ -316,6 +321,9 @@
                 },
                 body: formData
             });
+            if (res.status === 401 || res.status === 403) {
+                return logoutAndRedirect();
+            }
 
             const data = await res.json();
             document.getElementById('sql-prompt').value = data.transcript || '';
