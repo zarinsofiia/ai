@@ -130,7 +130,7 @@
 
     <div class="sql-input-container">
         <input id="sql-prompt" class="sql-input" placeholder="Ask in plain English..." />
-        <button class="sql-btn" onclick="askSQLAI()"><i class="fa-solid fa-paper-plane"></i></button>
+        <button class="sql-btn" onclick="askMSSQLAI()"><i class="fa-solid fa-paper-plane"></i></button>
         <button id="record-btn" class="sql-btn"><i class="fa-solid fa-microphone"></i></button>
         <input type="file" id="audio-upload" accept="audio/*" style="display: none;" />
 
@@ -223,6 +223,18 @@
             }
 
             contentSpan.textContent = summary;
+            // Always show raw response
+            const rawPre = document.createElement('pre');
+            rawPre.style.marginTop = '10px';
+            rawPre.style.fontSize = '12px';
+            rawPre.style.color = '#aaa';
+            rawPre.style.whiteSpace = 'pre-wrap';
+            rawPre.style.backgroundColor = '#1e1e1e';
+            rawPre.style.padding = '10px';
+            rawPre.style.borderRadius = '8px';
+            rawPre.textContent = JSON.stringify(data, null, 2);
+
+            wrapper.appendChild(rawPre);
 
         } catch (err) {
             contentSpan.textContent = '❌ Error: ' + err.message;
@@ -240,6 +252,101 @@
         container.scrollTop = container.scrollHeight;
     }
 </script>
+
+
+<script>
+    async function askMSSQLAI() {
+        const input = document.getElementById('sql-prompt');
+        const prompt = input.value.trim();
+        if (!prompt) return;
+
+        appendMessage('user', prompt);
+        input.value = '';
+
+        const container = document.getElementById('sql-container');
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('sql-response', 'message');
+
+        const contentSpan = document.createElement('span');
+        wrapper.appendChild(contentSpan);
+
+        const speakerBtn = document.createElement('i');
+        wrapper.appendChild(speakerBtn);
+        container.appendChild(wrapper);
+        container.scrollTop = container.scrollHeight;
+
+        const makeRequest = async () => {
+            const token = localStorage.getItem('bearerToken');
+            return await fetch('http://192.168.2.70:3001/api/askAI/sql-mssql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ prompt })
+            });
+        };
+
+        try {
+            let res = await makeRequest();
+
+            if (res.status === 401 || res.status === 403) {
+                return logoutAndRedirect();
+            }
+
+            const data = await res.json();
+            console.log('✅ MSSQL AI Response:', data);
+
+            if (data.error) {
+                contentSpan.textContent = '❌ ' + (data.error || 'An error occurred.');
+                return;
+            }
+
+            let summary = data.summary?.trim();
+            if (!summary) {
+                if (Array.isArray(data.result)) {
+                    summary = `✅ ${data.result.length} row(s) returned.`;
+                } else {
+                    summary = '⚠️ No summary available.';
+                }
+            }
+
+            // Clean up and display summary with formatting
+            summary = summary
+                .replace(/<\/?think>/gi, '')                       // remove <think> tags
+                .replace(/\n/g, '<br>')                            // line breaks
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // bold formatting
+
+            contentSpan.innerHTML = summary;
+
+            const rawPre = document.createElement('pre');
+            rawPre.style.marginTop = '10px';
+            rawPre.style.fontSize = '12px';
+            rawPre.style.color = '#aaa';
+            rawPre.style.whiteSpace = 'pre-wrap';
+            rawPre.style.backgroundColor = '#1e1e1e';
+            rawPre.style.padding = '10px';
+            rawPre.style.borderRadius = '8px';
+            rawPre.textContent = JSON.stringify(data, null, 2);
+            wrapper.appendChild(rawPre);
+
+        } catch (err) {
+            contentSpan.textContent = '❌ Error: ' + err.message;
+        }
+
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function appendMessage(role, text) {
+        const container = document.getElementById('sql-container');
+        const msg = document.createElement('div');
+        msg.classList.add(role === 'user' ? 'user-message' : 'sql-response', 'message');
+        msg.textContent = text;
+        container.appendChild(msg);
+        container.scrollTop = container.scrollHeight;
+    }
+</script>
+
 
 <script>
     // 🎤 Voice recording (unchanged)
