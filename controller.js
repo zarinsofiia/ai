@@ -168,7 +168,7 @@ exports.transcribeWithWhisper = [
         form.append('audio', fs.createReadStream(filePath));
 
         try {
-            const response = await axios.post('http://192.168.2.70:5005/transcribe', form, {
+            const response = await axios.post('http://192.168.2.69:5005/transcribe', form, {
                 headers: form.getHeaders()
             });
 

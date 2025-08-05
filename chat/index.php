@@ -172,7 +172,7 @@
 
   async function fetchWithAuth(token, prompt) {
     try {
-      return await fetch('http://192.168.2.70:3001/api/askAI', {
+      return await fetch('http://192.168.2.69:3001/api/askAI', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -229,7 +229,7 @@
           formData.append('audio', blob, 'voice.webm');
 
           try {
-            const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+            const res = await fetch('http://192.168.2.69:3001/api/askAI/transcribe', {
               method: 'POST',
               headers: {
                 'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
@@ -266,7 +266,7 @@
     chatStatus.textContent = '⏳ Transcribing uploaded file...';
 
     try {
-      const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+      const res = await fetch('http://192.168.2.69:3001/api/askAI/transcribe', {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')

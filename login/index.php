@@ -157,7 +157,7 @@
         }
 
         try {
-            const response = await fetch('http://192.168.2.70:3001/api/auth/login', {
+            const response = await fetch('http://192.168.2.69:3001/api/auth/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

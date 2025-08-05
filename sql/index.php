@@ -184,7 +184,7 @@
 
         const makeRequest = async () => {
             const token = localStorage.getItem('bearerToken');
-            return await fetch('http://192.168.2.70:3001/api/askAI/sql', {
+            return await fetch('http://192.168.2.69:3001/api/askAI/sql', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -269,15 +269,12 @@
 
         const contentSpan = document.createElement('span');
         wrapper.appendChild(contentSpan);
-
-        const speakerBtn = document.createElement('i');
-        wrapper.appendChild(speakerBtn);
         container.appendChild(wrapper);
         container.scrollTop = container.scrollHeight;
 
         const makeRequest = async () => {
             const token = localStorage.getItem('bearerToken');
-            return await fetch('http://192.168.2.70:3001/api/askAI/sql-mssql', {
+            return await fetch('http://192.168.2.69:3001/api/askAI/sql-mssql', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -297,11 +294,25 @@
             const data = await res.json();
             console.log('✅ MSSQL AI Response:', data);
 
+            // ——— handle error from API, but still show raw JSON ———
             if (data.error) {
                 contentSpan.textContent = '❌ ' + (data.error || 'An error occurred.');
+
+                const rawPre = document.createElement('pre');
+                rawPre.style.marginTop = '10px';
+                rawPre.style.fontSize = '12px';
+                rawPre.style.color = '#aaa';
+                rawPre.style.whiteSpace = 'pre-wrap';
+                rawPre.style.backgroundColor = '#1e1e1e';
+                rawPre.style.padding = '10px';
+                rawPre.style.borderRadius = '8px';
+                rawPre.textContent = JSON.stringify(data, null, 2);
+                wrapper.appendChild(rawPre);
+
                 return;
             }
 
+            // ——— success path ———
             let summary = data.summary?.trim();
             if (!summary) {
                 if (Array.isArray(data.result)) {
@@ -319,6 +330,7 @@
 
             contentSpan.innerHTML = summary;
 
+            // ——— append raw JSON in success too ———
             const rawPre = document.createElement('pre');
             rawPre.style.marginTop = '10px';
             rawPre.style.fontSize = '12px';
@@ -331,7 +343,19 @@
             wrapper.appendChild(rawPre);
 
         } catch (err) {
+            // network / unexpected error
             contentSpan.textContent = '❌ Error: ' + err.message;
+
+            const rawPre = document.createElement('pre');
+            rawPre.style.marginTop = '10px';
+            rawPre.style.fontSize = '12px';
+            rawPre.style.color = '#aaa';
+            rawPre.style.whiteSpace = 'pre-wrap';
+            rawPre.style.backgroundColor = '#1e1e1e';
+            rawPre.style.padding = '10px';
+            rawPre.style.borderRadius = '8px';
+            rawPre.textContent = err.stack || err.message;
+            wrapper.appendChild(rawPre);
         }
 
         container.scrollTop = container.scrollHeight;
@@ -346,6 +370,7 @@
         container.scrollTop = container.scrollHeight;
     }
 </script>
+
 
 
 <script>
@@ -379,7 +404,7 @@
                     formData.append('audio', blob, 'voice.webm');
 
                     try {
-                        const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+                        const res = await fetch('http://192.168.2.69:3001/api/askAI/transcribe', {
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
@@ -421,7 +446,7 @@
         status.textContent = '⏳ Transcribing uploaded file...';
 
         try {
-            const res = await fetch('http://192.168.2.70:3001/api/askAI/transcribe', {
+            const res = await fetch('http://192.168.2.69:3001/api/askAI/transcribe', {
                 method: 'POST',
                 headers: {
                     'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
