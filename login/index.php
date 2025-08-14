@@ -157,7 +157,7 @@
         }
 
         try {
-            const response = await fetch('http://192.168.2.69:3001/api/auth/login', {
+            const response = await fetch('http://192.168.2.22:3001/api/auth/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -170,14 +170,23 @@
 
             const data = await response.json();
 
-          if (response.ok && data.accessToken && data.refreshToken) {
+           if (response.ok && data.accessToken && data.refreshToken) {
+  localStorage.setItem('bearerToken', data.accessToken);
+  localStorage.setItem('refreshToken', data.refreshToken);
 
-                localStorage.setItem('bearerToken', data.accessToken);
-                 localStorage.setItem('refreshToken', data.refreshToken); 
-                window.location.href = '../ai/main.php?page=dashboard';
-            } else {
-                msg.innerText = '❌ Login failed: Invalid credentials';
-            }
+  // NEW: extract and store userId / username (if present)
+  const claims = parseJwt(data.accessToken);
+  const userId = getIdFromClaims(claims);
+  if (userId != null) localStorage.setItem('userId', String(userId));
+  if (claims?.username || claims?.name) {
+    localStorage.setItem('username', claims.username || claims.name);
+  }
+
+  window.location.href = '../ai/main.php?page=dashboard';
+} else {
+  msg.innerText = '❌ Login failed: Invalid credentials';
+}
+
 
         } catch (err) {
             msg.innerText = '❌ Server error. Please try again.';
@@ -187,4 +196,32 @@
             button.disabled = false;
         }
     });
+</script>
+<script>
+    function parseJwt(token) {
+        if (!token) return null;
+        const base64Url = token.split('.')[1];
+        if (!base64Url) return null;
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(atob(base64).split('').map(c =>
+            '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join(''));
+        try {
+            return JSON.parse(json);
+        } catch {
+            return null;
+        }
+    }
+
+    function getIdFromClaims(claims) {
+        if (!claims) return null;
+        // common claim names your backend might use
+        return (
+            claims.id ??
+            claims.userId ??
+            claims.uid ??
+            claims.sub ?? // sometimes is the user id
+            (typeof claims.user === 'object' ? (claims.user.id ?? claims.user.userId) : null)
+        ) ?? null;
+    }
 </script>

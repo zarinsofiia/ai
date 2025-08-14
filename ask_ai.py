@@ -3,7 +3,7 @@ import mysql.connector
 
 # === CONFIGURATION ===
 
-DEESEEK_API_URL = "http://192.168.2.69:11434/api/generate"
+DEESEEK_API_URL = "http://192.168.2.22:11434/api/generate"
 
 DB_CONFIG = {
     "host": "localhost",

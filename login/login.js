@@ -3,7 +3,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
 
-  const response = await fetch('http://192.168.2.69:3001/api/auth/login', {
+  const response = await fetch('http://192.168.2.22:3001/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
