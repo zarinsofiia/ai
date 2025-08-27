@@ -159,7 +159,7 @@
                     <a href="main.php?page=sql" class="<?= $active === 'sql' ? 'active' : '' ?>">
                         <i class="fa-solid fa-database"></i><span>Database Assistant</span>
                     </a>
-                    <a href="login/index.php" onclick="localStorage.clear()"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></a>
+                    <a href="./" onclick="localStorage.clear()"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></a>
                 </nav>
 
                 <main>
