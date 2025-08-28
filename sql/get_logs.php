@@ -181,19 +181,20 @@ function stats_query($mysqli, $where, $types, $params, $extraWhere = '') {
   $sql = "
     SELECT
       COUNT(*) AS total,
+      AVG(latency_ms) AS avg_ms,
       SUM(CASE WHEN (error_text IS NULL OR TRIM(error_text) = '') THEN 1 ELSE 0 END) AS success,
       SUM(CASE WHEN (error_text IS NOT NULL AND TRIM(error_text) <> '') THEN 1 ELSE 0 END) AS failed
     FROM ai_query_logs
     $wSQL
   ";
   $stmt = $mysqli->prepare($sql);
-  if (!$stmt) return ['total'=>0,'success'=>0,'failed'=>0];
+  if (!$stmt) return ['total'=>0,'success'=>0,'failed'=>0,'avg_ms'=>null];
 
   if ($extraWhere !== '') {
     // extraWhere for today adds 2 string params (start,end)
     $t = $types . 'ss';
     $p = $params;
-    $todayStart = date('Y-m-d 00:00:00');
+    $todayStart    = date('Y-m-d 00:00:00');
     $tomorrowStart = date('Y-m-d 00:00:00', strtotime('+1 day'));
     $p[] = $todayStart;
     $p[] = $tomorrowStart;
@@ -204,21 +205,26 @@ function stats_query($mysqli, $where, $types, $params, $extraWhere = '') {
 
   if (!$stmt->execute()) {
     $stmt->close();
-    return ['total'=>0,'success'=>0,'failed'=>0];
+    return ['total'=>0,'success'=>0,'failed'=>0,'avg_ms'=>null];
   }
   $r = $stmt->get_result()->fetch_assoc();
   $stmt->close();
-  $total = intval($r['total'] ?? 0);
+
+  $total   = intval($r['total'] ?? 0);
   $success = intval($r['success'] ?? 0);
   $failed  = intval($r['failed'] ?? 0);
+  $avg_ms  = isset($r['avg_ms']) ? (int)round($r['avg_ms']) : null;
+
   $spct = $total > 0 ? round(($success / $total) * 100, 1) : 0.0;
-  $fpct = $total > 0 ? round(($failed / $total) * 100, 1)   : 0.0;
+  $fpct = $total > 0 ? round(($failed  / $total) * 100, 1) : 0.0;
+
   return [
-    'total' => $total,
-    'success' => $success,
-    'failed' => $failed,
+    'total'       => $total,
+    'success'     => $success,
+    'failed'      => $failed,
     'success_pct' => $spct,
-    'failed_pct' => $fpct
+    'failed_pct'  => $fpct,
+    'avg_ms'      => $avg_ms
   ];
 }
 
@@ -230,7 +236,7 @@ $next_cursor = null;
 $next_cursor_ts = null;
 if (!empty($rows)) {
   $last = $rows[count($rows)-1];
-  $next_cursor = $last['id'];
+  $next_cursor    = $last['id'];
   $next_cursor_ts = $last['created_at'];
 }
 

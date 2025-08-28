@@ -1,5 +1,5 @@
 <?php
-// sql/index.php  — MSSQL-only UI with latency badge + organized helpers + cancel-in-flight + infinite-scroll + stats
+// sql/index.php  — MSSQL-only UI with latency badge + organized helpers + cancel-in-flight + infinite-scroll + stats (incl. Avg Speed)
 ?>
 <!doctype html>
 <html lang="en">
@@ -301,6 +301,13 @@
         <span class="fail-dot"></span>
         <span id="all-fail">Fail: –</span>
       </div>
+      <!-- NEW: Speed pill (comment the display line in renderStats() to hide) -->
+      <div class="stat-pill" id="speed-pill" style="display:none;">
+        <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
+        <span id="today-avg">Today Avg: –</span>
+        <span style="opacity:.6;">•</span>
+        <span id="all-avg">All Avg: –</span>
+      </div>
     </div>
 
     <div class="sql-messages" id="sql-container">
@@ -331,6 +338,9 @@
   <script>
     ;
     (() => {
+      // ─────────────────────────────────────────────────────────
+      // Config / constants
+      // ─────────────────────────────────────────────────────────
       const API_BASE = 'http://192.168.2.22:3001/api/askAI';
       const busybar = document.getElementById('busybar');
       const container = document.getElementById('sql-container');
@@ -349,10 +359,18 @@
       const todayFailEl = document.getElementById('today-fail');
       const allOkEl = document.getElementById('all-ok');
       const allFailEl = document.getElementById('all-fail');
+      // NEW for avg speed
+      const speedPill = document.getElementById('speed-pill');
+      const todayAvgEl = document.getElementById('today-avg');
+      const allAvgEl = document.getElementById('all-avg');
 
+      // sending state + aborter
       let isSending = false;
       let currentAbortController = null;
 
+      // ─────────────────────────────────────────────────────────
+      // UI helpers
+      // ─────────────────────────────────────────────────────────
       function setLoading(enabled) {
         busybar.classList.toggle('active', !!enabled);
         document.body.setAttribute('aria-busy', enabled ? 'true' : 'false');
@@ -426,7 +444,22 @@
 
       function formatSummary(s) {
         if (!s) return '';
-        return s.replace(/<\/?think>/gi, '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        return s
+          .replace(/<\/?think>/gi, '')
+          .replace(/\n/g, '<br>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      }
+
+      function escapeHtml(s) {
+        return s ?
+          s.replace(/[&<>"']/g, m => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+          } [m])) :
+          '';
       }
 
       function prettyLatency(ms) {
@@ -439,12 +472,17 @@
         return `${m}:${ss}`;
       }
 
+      // ─────────────────────────────────────────────────────────
+      // MSSQL call with cancel support
+      // ─────────────────────────────────────────────────────────
       async function askMSSQLAI() {
-        if (isSending) return;
+        if (isSending) return; // guard
         const prompt = (inputEl.value || '').trim();
         if (!prompt) return;
+
         appendMessage('user', prompt);
         inputEl.value = '';
+
         setLoading(true);
         const {
           wrapper,
@@ -459,7 +497,9 @@
           resultObj = null,
           errorText = null;
 
+        // create an abort controller for this request
         currentAbortController = new AbortController();
+
         try {
           const res = await fetch(`${API_BASE}/sql-mssql`, {
             method: 'POST',
@@ -479,9 +519,23 @@
           }
 
           const data = await res.json().catch(() => ({}));
+          // Rich error handling that also captures summary/sql/result
           if (!res.ok || data.error) {
-            errorText = (data && data.error) ? data.error : (`HTTP ${res.status}: ${res.statusText || 'Error'}`);
-            contentSpan.textContent = '❌ ' + errorText;
+            const httpMsg = `HTTP ${res.status}: ${res.statusText || 'Error'}`;
+            const apiMsg = (typeof data.error === 'string' && data.error.trim()) ?
+              data.error.trim() :
+              (typeof data.message === 'string' && data.message.trim()) ?
+              data.message.trim() :
+              null;
+            errorText = apiMsg ? apiMsg : httpMsg;
+
+            summaryPlain = (data.summary || data.message || '').toString().trim() || null;
+            sqlText = data.sql || data.sql_text || data.sqlToRun || data.lastTriedSql || null;
+            resultObj = data.result ?? (data.mssqlResult && data.mssqlResult.recordset) ?? data.rows ?? null;
+
+            const display = summaryPlain || errorText;
+            contentSpan.textContent = '❌ ' + display;
+
             appendShowRaw(wrapper, {
               source: 'sql-mssql',
               request: {
@@ -497,8 +551,11 @@
             if (typeof data.latency_ms === 'number') serverLatencyMs = data.latency_ms;
             else if (typeof data.latencyMs === 'number') serverLatencyMs = data.latencyMs;
 
-            const summary = summaryPlain || (Array.isArray(resultObj) ? `✅ ${resultObj.length} row(s) returned.` : '⚠️ No summary available.');
+            const summary = summaryPlain || (Array.isArray(resultObj) ?
+              `✅ ${resultObj.length} row(s) returned.` :
+              '⚠️ No summary available.');
             contentSpan.innerHTML = formatSummary(summary);
+
             appendShowRaw(wrapper, {
               source: 'sql-mssql',
               request: {
@@ -535,6 +592,7 @@
           const latencyToShow = (serverLatencyMs != null ? serverLatencyMs : latencyClientMs);
           const human = prettyLatency(latencyToShow);
 
+          // fire-and-forget log
           saveLogLocally({
             source: 'sql-mssql',
             question: prompt,
@@ -561,24 +619,103 @@
         }
       }
 
-      // Voice record/upload (unchanged) …
+      // ─────────────────────────────────────────────────────────
+      // Voice recording / upload
+      // ─────────────────────────────────────────────────────────
       let mediaRecorder;
       let audioChunks = [];
       const micIcon = recordBtn.querySelector('i');
       const recordStatus = document.getElementById('record-status');
       const audioInput = document.getElementById('audio-upload');
-      recordBtn.addEventListener('click', async () => {
-        /* (same as before) */ });
-      uploadAudioBtn.addEventListener('click', () => {
-        if (!uploadAudioBtn.disabled) audioInput.click();
-      });
-      audioInput.addEventListener('change', async function() {
-        /* (same as before) */ });
 
+      recordBtn.addEventListener('click', async () => {
+        if (recordBtn.disabled) return;
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+          micIcon.className = 'fa-solid fa-microphone';
+          recordStatus.textContent = 'Transcribing...';
+        } else {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: true
+            });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+            mediaRecorder.onstop = async () => {
+              const blob = new Blob(audioChunks, {
+                type: 'audio/webm'
+              });
+              const formData = new FormData();
+              formData.append('audio', blob, 'voice.webm');
+
+              try {
+                const res = await fetch(`${API_BASE}/transcribe`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
+                  },
+                  body: formData
+                });
+                if (res.status === 401 || res.status === 403) {
+                  return logoutAndRedirect && logoutAndRedirect();
+                }
+                const data = await res.json();
+                inputEl.value = data.transcript || '';
+                recordStatus.textContent = '✅ Transcribed';
+              } catch {
+                recordStatus.textContent = '❌ Transcription failed';
+              }
+            };
+
+            mediaRecorder.start();
+            micIcon.className = 'fa-solid fa-stop';
+            recordStatus.textContent = '🎙️ Recording... Click to stop';
+          } catch {
+            recordStatus.textContent = '❌ Microphone access denied';
+          }
+        }
+      });
+
+      uploadAudioBtn.addEventListener('click', () => {
+        if (uploadAudioBtn.disabled) return;
+        audioInput.click();
+      });
+
+      audioInput.addEventListener('change', async function() {
+        const file = this.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('audio', file);
+        recordStatus.textContent = '⏳ Transcribing uploaded file...';
+
+        try {
+          const res = await fetch(`${API_BASE}/transcribe`, {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + localStorage.getItem('bearerToken')
+            },
+            body: formData
+          });
+          if (res.status === 401 || res.status === 403) {
+            return logoutAndRedirect && logoutAndRedirect();
+          }
+          const data = await res.json();
+          inputEl.value = data.transcript || '';
+          recordStatus.textContent = '✅ Transcribed from file';
+        } catch {
+          recordStatus.textContent = '❌ File transcription failed';
+        }
+      });
+
+      // ─────────────────────────────────────────────────────────
       // History helpers (∞-scroll + stats)
-      const MAX_JSON_BYTES = 500 * 1024;
-      const PAGE_SIZE = 30;
-      const SCROLL_FETCH_THRESHOLD = 80;
+      // ─────────────────────────────────────────────────────────
+      const MAX_JSON_BYTES = 500 * 1024; // 500KB cap
+      const PAGE_SIZE = 30; // page size
+      const SCROLL_FETCH_THRESHOLD = 80; // px from top to trigger
 
       const truncateJson = (s) => (!s ? null : (s.length > MAX_JSON_BYTES ? s.slice(0, MAX_JSON_BYTES) : s));
       const safeParse = (json) => {
@@ -592,9 +729,10 @@
       function getUserIdFromLSorJWT() {
         const ls = localStorage.getItem('userId');
         if (ls && !isNaN(ls)) return parseInt(ls, 10);
+
         const token = localStorage.getItem('bearerToken');
         try {
-          const claims = parseJwt ? parseJwt(token) : null;
+          const claims = parseJwt ? parseJwt(token) : null; // provided by your auth-check.js
           const id = (typeof getIdFromClaims === 'function') ? getIdFromClaims(claims) : claims?.sub;
           return (id != null && !Number.isNaN(Number(id))) ? Number(id) : null;
         } catch {
@@ -640,8 +778,8 @@
         const r = safeParse(resultJson);
         if (!r) return null;
         if (Array.isArray(r)) return r.length;
-        if (Array.isArray(r?.recordset)) return r.recordset.length;
-        if (Array.isArray(r?.result)) return r.result.length;
+        if (Array.isArray(r?.recordset)) return r.recordset.length; // mssql
+        if (Array.isArray(r?.result)) return r.result.length; // some APIs
         if (typeof r === 'object' && typeof r.length === 'number') return r.length;
         return null;
       }
@@ -652,6 +790,7 @@
         appendMessage('user', item.question || '', {
           prepend
         });
+
         const wrap = document.createElement('div');
         wrap.classList.add('sql-response', 'message');
 
@@ -664,12 +803,20 @@
         meta.textContent = `[${item.source}] ${createdAt}${latPretty ? ' • ⏱ ' + latPretty : ''}`;
         wrap.appendChild(meta);
 
+        // CONTENT: show summary (if any) and error (if any)
         const contentSpan = document.createElement('span');
         const hasError = !!(item.error_text && item.error_text.trim());
+        const hasSummary = !!(item.summary && item.summary.trim());
+
         if (hasError) {
-          contentSpan.textContent = '❌ ' + item.error_text.trim();
-          contentSpan.style.color = '#ff6b6b';
-        } else if (item.summary && item.summary.trim()) {
+          let html = '';
+          if (hasSummary) {
+            html += `<div>${formatSummary(item.summary.trim())}</div>`;
+            html += `<hr style="border:none;height:1px;background:#333;margin:8px 0;opacity:.5;">`;
+          }
+          html += `<div style="color:#ff6b6b;">❌ ${escapeHtml(item.error_text.trim())}</div>`;
+          contentSpan.innerHTML = html;
+        } else if (hasSummary) {
           contentSpan.innerHTML = formatSummary(item.summary.trim());
         } else {
           const n = getRowCountFromResultJSON(item.result_json);
@@ -678,11 +825,13 @@
         }
         wrap.appendChild(contentSpan);
 
-        if (item.sql_text || item.result_json || item.error_text) {
+        // RAW payload (include summary too)
+        if (item.sql_text || item.result_json || item.error_text || item.summary) {
           const details = document.createElement('details');
           const sm = document.createElement('summary');
           sm.textContent = 'Show raw';
           details.appendChild(sm);
+
           const pre = document.createElement('pre');
           pre.style.marginTop = '8px';
           pre.style.fontSize = '12px';
@@ -691,7 +840,9 @@
           pre.style.backgroundColor = '#1e1e1e';
           pre.style.padding = '10px';
           pre.style.borderRadius = '8px';
+
           const payload = {
+            summary: item.summary || null,
             sql: item.sql_text || null,
             result: safeParse(item.result_json),
             error: item.error_text || null,
@@ -704,7 +855,7 @@
         }
 
         if (prepend) {
-          const insertBeforeNode = container.children[2] || null;
+          const insertBeforeNode = container.children[2] || null; // after sentinel+loader
           container.insertBefore(wrap, insertBeforeNode);
         } else {
           container.appendChild(wrap);
@@ -714,9 +865,9 @@
       // [∞-scroll] Pagination state
       let isFetchingOlder = false;
       let hasMoreBefore = true;
-      let totalLoaded = 0;
-      let oldestCursor = null;
-      const seenIds = new Set();
+      let totalLoaded = 0; // for offset fallback (optional)
+      let oldestCursor = null; // before_id cursor
+      const seenIds = new Set(); // de-dupe
 
       function getItemId(item, idx) {
         return item.id ?? item.log_id ?? item.ID ?? `${item.created_at || item.createdAt || 'no-ts'}#${idx}#${(item.question || '').slice(0,50)}`;
@@ -762,8 +913,8 @@
         if (!items || items.length === 0) return 0;
         const list = prepend ? items.slice().reverse() : items.slice();
         let rendered = 0;
-        const prevHeight = container.scrollHeight;
 
+        const prevHeight = container.scrollHeight;
         for (let i = 0; i < list.length; i++) {
           const it = list[i];
           const id = getItemId(it, i);
@@ -777,7 +928,7 @@
 
         if (prepend) {
           const newHeight = container.scrollHeight;
-          container.scrollTop = newHeight - prevHeight + container.scrollTop; // anchor
+          container.scrollTop = newHeight - prevHeight + container.scrollTop; // keep view anchored
         } else {
           container.scrollTop = container.scrollHeight;
         }
@@ -790,14 +941,27 @@
           statsbar.style.display = 'none';
           return;
         }
-        statsbar.style.display = 'flex'; //comment this to remove from ui
+        statsbar.style.display = 'flex'; // comment this to permanently hide the whole bar
+
         const a = stats.all,
           t = stats.today;
+
+        // existing pass/fail
         todayOkEl.textContent = `Today OK: ${t.success_pct}% (${t.success}/${t.total || 0})`;
         todayFailEl.textContent = `Fail: ${t.failed_pct}% (${t.failed})`;
         allOkEl.textContent = `All OK: ${a.success_pct}% (${a.success}/${a.total || 0})`;
         allFailEl.textContent = `Fail: ${a.failed_pct}% (${a.failed})`;
+
+        // NEW: average latency (ms → pretty)
+        const tAvg = (typeof t.avg_ms === 'number') ? prettyLatency(t.avg_ms) : '–';
+        const aAvg = (typeof a.avg_ms === 'number') ? prettyLatency(a.avg_ms) : '–';
+        todayAvgEl.textContent = `Today Avg: ${tAvg}`;
+        allAvgEl.textContent = `All Avg: ${aAvg}`;
+
+        // show only the speed pill (comment out this line to hide speed pill later)
+        speedPill.style.display = 'inline-flex'; // ← comment to hide Avg Speed pill
       }
+
       async function refreshStats() {
         const params = buildLogsQuery({
           limit: 1,
@@ -827,11 +991,12 @@
           const items = data.items || [];
           renderStats(data.stats);
           if (items.length === 0) return;
+
           // initial render oldest→newest
           renderHistoryBatch(items.slice().reverse(), {
             prepend: false
           });
-          oldestCursor = data.next_cursor ?? oldestCursor;
+          if (data.next_cursor) oldestCursor = data.next_cursor;
         } catch (e) {
           appendMessage('sql', '⚠️ Failed to load history: ' + e.message);
         }
@@ -862,8 +1027,8 @@
             rendered = renderHistoryBatch(data.items, {
               prepend: true
             });
+            if (rendered === 0) hasMoreBefore = false;
           }
-          if (rendered === 0) hasMoreBefore = false;
         } catch (e) {
           console.warn('loadOlderOnScroll failed:', e.message);
         } finally {
@@ -872,7 +1037,7 @@
         }
       }
 
-      // Wire-up
+      // Wire up
       sendBtn.addEventListener('click', () => {
         if (isSending) {
           if (currentAbortController) currentAbortController.abort();
@@ -880,12 +1045,14 @@
         }
         askMSSQLAI();
       });
+
       inputEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           if (!isSending) askMSSQLAI();
         }
       });
+
       container.addEventListener('scroll', () => {
         loadOlderOnScroll();
       });
